@@ -1,0 +1,138 @@
+# Make sure to use the same airflow version in the Dockerfile and values.yaml.
+# Search for the above text
+airflowVersion: "3.1.0"
+
+config:
+  core:
+    remote_logging: 'True'
+    hostname_callable: airflow.utils.net.get_host_ip_address
+  logging:
+    remote_logging: 'True'
+    logging_level: 'INFO'
+    remote_base_log_folder: 's3://careabout-airflow-logs/'
+    remote_log_conn_id: 'aws_conn' # Notice that this name is used in Step3 for creating connections through Airflow UI
+    delete_worker_pods: 'False'
+
+images:
+  airflow:
+    repository: 663799993111.dkr.ecr.ap-southeast-2.amazonaws.com/careabout-airflow
+
+env:
+  - name: AIRFLOW__API__BASE_URL
+    value: 'https://airflow.careabout.com.au'
+  - name: AIRFLOW__CORE__AUTH_MANAGER
+    value: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+    # value: 'airflow.providers.amazon.aws.auth_manager.aws_auth_manager.AwsAuthManager'
+  - name: AIRFLOW__AWS_AUTH_MANAGER__REGION_NAME
+    value: 'ap-southeast-2'
+  - name: AIRFLOW__AWS_AUTH_MANAGER__AVP_POLICY_STORE_ID
+    value: 'SHHHHH'
+  - name: AIRFLOW__AWS_AUTH_MANAGER__SAML_METADATA_URL
+    value: 'https://portal.sso.ap-southeast-2.amazonaws.com/saml/metadata/SHHHHH'
+  - name: AIRFLOW__AWS_AUTH_MANAGER__CONN_ID
+    value: 'aws_default'
+  - name: AIRFLOW__WEBSERVER__BASE_URL
+    value: 'https://airflow.careabout.com.au'
+  - name: AIRFLOW__PROVIDERS_ODBC__ALLOW_DRIVER_IN_EXTRA
+    value: 'true'
+  - name: AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT
+    value: '600'
+  - name: AIRFLOW__CELERY__WORKER_CONCURRENCY
+    value: '8'
+
+ingress:
+  apiServer:
+    enabled: true
+    ingressClassName: alb
+    hosts:
+      - name: airflow.careabout.com.au
+    path: /
+    pathType: Prefix
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/healthcheck-path: /api/v2/monitor/health
+    
+secret:
+  - envName: AIRFLOW_CONN_CAREABOUT_SALESFORCE
+    secretName: airflow-connections-config
+    secretKey: salesforce
+  - envName: AIRFLOW_CONN_LOOKOUT_API
+    secretName: airflow-connections-config
+    secretKey: lookout_api
+  - envName: AIRFLOW_CONN_GA4_CONNECTION
+    secretName: airflow-connections-config
+    secretKey: ga4_connection
+  - envName: AIRFLOW_CONN_CAREABOUT_TABLEAU
+    secretName: airflow-connections-config
+    secretKey: tableau
+  - envName: AIRFLOW_CONN_CAREABOUT_AZURE_DATA_FACTORY
+    secretName: airflow-connections-config
+    secretKey: azure_data_factory
+  - envName: AIRFLOW_CONN_CAREABOUT_SNOWFLAKE
+    secretName: airflow-connections-config
+    secretKey: snowflake
+  - envName: AIRFLOW_CONN_CAREABOT_ORTTO
+    secretName: airflow-connections-config
+    secretKey: ortto
+
+postgresql:
+  enabled: false
+
+pgbouncer:
+  enabled: true
+
+# executor: KubernetesExecutor
+
+redis:
+  enabled: true
+  persistence:
+    enabled: true
+    storageClassName: gp2
+  passwordSecretName: airflow-redis-secret
+
+workers:
+  replicas: 1
+  resources:
+    requests:
+      memory: 6Gi
+    limits:
+      memory: 7Gi
+  persistence:
+    enabled: true
+    storageClassName: gp2
+  extraVolumes:
+    - name: airflow-snowflake-p8-key
+      secret:
+        secretName: airflow-snowflake-p8-key
+        defaultMode: 0600
+  extraVolumeMounts:
+    - name: airflow-snowflake-p8-key
+      mountPath: /opt/airflow/keys/
+      readOnly: true
+
+webserver:
+  defaultUser:
+    enabled: false
+
+apiServer:
+  replicas: 2
+
+triggerer:
+  persistence:
+    enabled: true
+    storageClassName: gp2
+
+data:
+  resultBackendSecretName:
+  brokerUrlSecretName: airflow-redis-secret
+  metadataConnection:
+    user: airflow
+    pass: SHHHHH
+    protocol: postgresql
+    host: eks-postgres-db.cqsug2twrnhs.ap-southeast-2.rds.amazonaws.com
+    port: 5432
+    db: airflow
+  
+apiSecretKeySecretName: airflow-api-secret-key
+useStandardNaming: true
